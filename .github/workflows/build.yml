@@ -18,6 +18,9 @@ concurrency:
 env:
   GO_VERSION: "1.25"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build geosite.dat + geoip.dat
