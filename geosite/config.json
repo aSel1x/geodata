@@ -1,0 +1,14 @@
+[
+	{
+		"name": "geosite.dat",
+		"mode": "allowlist",
+		"lists": [
+			"youtube",
+			"telegram",
+			"openai",
+			"google-gemini",
+			"instagram",
+			"discord"
+		]
+	}
+]

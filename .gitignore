@@ -1,0 +1,7 @@
+# Xray dat files (built by CI)
+*.dat
+*.sha256sum
+
+# OS
+.DS_Store
+Thumbs.db

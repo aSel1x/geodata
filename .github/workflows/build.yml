@@ -1,0 +1,91 @@
+name: Build Xray dat files
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "geosite/**"
+      - "geoip/**"
+      - ".github/workflows/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.24"
+
+jobs:
+  build:
+    name: Build geosite.dat + geoip.dat
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set variables
+        run: |
+          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+          echo "YEAR=$(date +%Y)" >> $GITHUB_ENV
+          echo "MONTH=$(date +%m)" >> $GITHUB_ENV
+
+      # --- geosite.dat ---
+      - name: Clone v2fly/domain-list-community
+        run: git clone --depth 1 https://github.com/v2fly/domain-list-community.git /tmp/geosite-src
+
+      - name: Build geosite.dat
+        run: |
+          cp "${{ github.workspace }}/geosite/config.json" /tmp/geosite-src/config.json
+          cd /tmp/geosite-src
+          go run ./ -datprofile config.json -outputdir "${{ github.workspace }}"
+
+      # --- geoip.dat ---
+      - name: Clone v2fly/geoip
+        run: git clone --depth 1 https://github.com/v2fly/geoip.git /tmp/geoip-src
+
+      - name: Download DB-IP MMDB
+        run: |
+          URL="https://download.db-ip.com/free/dbip-country-lite-${{ env.YEAR }}-${{ env.MONTH }}.mmdb.gz"
+          curl -f -L -o /tmp/dbip-country-lite.mmdb.gz "$URL" || {
+            echo "DB-IP file for ${{ env.YEAR }}-${{ env.MONTH }} not found, trying previous month"
+            PREV=$(date -d "1 month ago" +%Y-%m)
+            URL="https://download.db-ip.com/free/dbip-country-lite-${PREV}.mmdb.gz"
+            curl -f -L -o /tmp/dbip-country-lite.mmdb.gz "$URL"
+          }
+          gzip -d /tmp/dbip-country-lite.mmdb.gz
+          mkdir -p /tmp/geoip-src/db-ip
+          mv /tmp/dbip-country-lite*.mmdb /tmp/geoip-src/db-ip/dbip-country-lite.mmdb
+
+      - name: Build geoip.dat
+        run: |
+          cp "${{ github.workspace }}/geoip/config.json" /tmp/geoip-src/config.json
+          cd /tmp/geoip-src
+          go run ./ -c config.json
+          cp ./output/dat/geoip.dat "${{ github.workspace }}/geoip.dat"
+
+      # --- Release ---
+      - name: Generate checksums
+        run: |
+          cd "${{ github.workspace }}"
+          sha256sum geosite.dat > geosite.dat.sha256sum
+          sha256sum geoip.dat > geoip.dat.sha256sum
+
+      - name: Create Release
+        run: |
+          gh release create ${{ env.TAG_NAME }} \
+            -t "${{ env.RELEASE_NAME }}" \
+            --latest \
+            geosite.dat geosite.dat.sha256sum \
+            geoip.dat geoip.dat.sha256sum
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
