@@ -1,0 +1,27 @@
+{
+  "input": [
+    {
+      "type": "dbipCountryMMDB",
+      "action": "add",
+      "args": {
+        "uri": "./db-ip/dbip-country-lite.mmdb",
+        "wantedList": ["ru"],
+        "onlyIPType": "ipv4"
+      }
+    },
+    {
+      "type": "private",
+      "action": "add"
+    }
+  ],
+  "output": [
+    {
+      "type": "v2rayGeoIPDat",
+      "action": "output",
+      "args": {
+        "outputName": "geoip.dat",
+        "wantedList": ["ru", "private"]
+      }
+    }
+  ]
+}
