@@ -8,7 +8,8 @@
 			"openai",
 			"google-gemini",
 			"instagram",
-			"discord"
+			"discord",
+			"anthropic"
 		]
 	}
 ]
