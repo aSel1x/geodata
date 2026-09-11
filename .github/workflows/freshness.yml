@@ -31,22 +31,38 @@ jobs:
             exit 1
           fi
 
-      - name: Mirror serves the same bytes as the release
+      - name: release branch matches the release
         run: |
           fail=0
           for f in geosite.dat geoip.dat; do
             curl -fsSL -o "/tmp/rel-$f" \
               "https://github.com/${{ github.repository }}/releases/latest/download/$f"
-            if ! curl -fsSL -o "/tmp/cdn-$f" \
-              "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release/$f"; then
-              echo "::error::jsDelivr is not serving $f"
-              fail=1; continue
-            fi
-            if cmp -s "/tmp/rel-$f" "/tmp/cdn-$f"; then
-              echo "$f: release and jsDelivr agree ($(stat -c%s "/tmp/rel-$f") bytes)"
+            curl -fsSL -o "/tmp/raw-$f" \
+              "https://raw.githubusercontent.com/${{ github.repository }}/release/$f"
+            if cmp -s "/tmp/rel-$f" "/tmp/raw-$f"; then
+              echo "$f: release and the release branch agree ($(stat -c%s "/tmp/rel-$f") bytes)"
             else
-              echo "::error::$f differs between the release and jsDelivr — purge did not take"
+              echo "::error::$f differs between the release and the release branch"
               fail=1
             fi
           done
           exit "$fail"
+
+      # jsDelivr caches branch refs with s-maxage=43200 and its purge API does not reliably
+      # flush the branch-to-content mapping, so it lags by design. Warn, never fail: a check
+      # that goes red every morning is a check nobody reads.
+      - name: jsDelivr lag (informational)
+        continue-on-error: true
+        run: |
+          want=$(curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/release/version.json" \
+                 | sed -n 's/.*"built_at":"\([^"]*\)".*/\1/p')
+          got=$(curl -fsSL "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release/version.json" \
+                 | sed -n 's/.*"built_at":"\([^"]*\)".*/\1/p')
+          echo "release branch: $want"
+          echo "jsDelivr:       $got"
+          if [ "$want" = "$got" ]; then
+            echo "jsDelivr is current"
+          else
+            lag=$(( ($(date -u -d "$want" +%s) - $(date -u -d "$got" +%s)) / 3600 ))
+            echo "::warning::jsDelivr is ${lag}h behind the release branch"
+          fi
