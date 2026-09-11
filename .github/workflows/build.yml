@@ -42,6 +42,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: stable
+          # No go.mod at the repo root — the modules live in the cloned upstreams,
+          # so there is nothing here for setup-go to key a cache on.
+          cache: false
 
       - name: Set variables
         run: |
