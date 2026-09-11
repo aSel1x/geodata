@@ -9,6 +9,12 @@ on:
         description: "Build and verify only, do not publish a release"
         type: boolean
         default: false
+  pull_request:
+    branches: [main]
+    paths:
+      - "geosite/**"
+      - "geoip/**"
+      - ".github/workflows/**"
   push:
     branches: [main]
     paths:
@@ -143,8 +149,44 @@ jobs:
           sha256sum geosite.dat > geosite.dat.sha256sum
           sha256sum geoip.dat > geoip.dat.sha256sum
 
+      # --- Mirror: orphan `release` branch so jsDelivr has something to serve ---
+      # Release assets, raw.githubusercontent and objects.githubusercontent all resolve to the
+      # same Fastly pool (185.199.108-111.133). jsDelivr sits on Cloudflare, so the branch is
+      # what buys an independent network path — not raw.githubusercontent.
+      - name: Publish to release branch
+        if: ${{ github.event_name != 'pull_request' && inputs.skip_release != true }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf /tmp/publish && mkdir -p /tmp/publish
+          cd "${{ github.workspace }}"
+          cp geosite.dat geosite.dat.sha256sum geoip.dat geoip.dat.sha256sum /tmp/publish/
+          # Freshness signal: a client can tell stale data from fresh, which a 200 + valid
+          # sha256sum cannot express on its own.
+          printf '{"tag":"%s","built_at":"%s","geosite_src":"%s","geoip_src":"%s"}\n' \
+            "$TAG_NAME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "$(git -C /tmp/geosite-src rev-parse HEAD)" \
+            "$(git -C /tmp/geoip-src rev-parse HEAD)" > /tmp/publish/version.json
+          cd /tmp/publish
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -qb release
+          git add .
+          git commit -qm "$TAG_NAME"
+          git push -f -q "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}" release
+
+      # Branch refs are cached 12h at the edge and 7 days client-side, so without this the
+      # nightly rebuild would stay invisible for up to a week.
+      - name: Purge jsDelivr cache
+        if: ${{ github.event_name != 'pull_request' && inputs.skip_release != true }}
+        run: |
+          for f in geosite.dat geosite.dat.sha256sum geoip.dat geoip.dat.sha256sum version.json; do
+            curl -sS -o /dev/null "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/$f" || true
+          done
+
       - name: Create Release
-        if: ${{ inputs.skip_release != true }}
+        if: ${{ github.event_name != 'pull_request' && inputs.skip_release != true }}
         run: |
           gh release create "${{ env.TAG_NAME }}" \
             -t "${{ env.RELEASE_NAME }}" \

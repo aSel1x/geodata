@@ -1,0 +1,52 @@
+name: Freshness check
+
+# Two outages (2026-07-09..07-16 and 2026-09-05..09-11, 15 builds) went unnoticed because a
+# stale release is indistinguishable from a fresh one: the URL still returns 200 and the
+# published sha256sums still verify. This job fails loudly, and GitHub emails the owner when a
+# scheduled workflow fails.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Latest release must be fresh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release younger than 36h
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          published=$(gh release view --repo "${{ github.repository }}" \
+            --json publishedAt --jq .publishedAt)
+          age=$(( ($(date -u +%s) - $(date -u -d "$published" +%s)) / 3600 ))
+          echo "Latest release published $published (${age}h ago)"
+          if [ "$age" -gt 36 ]; then
+            echo "::error::latest release is ${age}h old — the nightly build is not publishing"
+            exit 1
+          fi
+
+      - name: Mirror serves the same bytes as the release
+        run: |
+          fail=0
+          for f in geosite.dat geoip.dat; do
+            curl -fsSL -o "/tmp/rel-$f" \
+              "https://github.com/${{ github.repository }}/releases/latest/download/$f"
+            if ! curl -fsSL -o "/tmp/cdn-$f" \
+              "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release/$f"; then
+              echo "::error::jsDelivr is not serving $f"
+              fail=1; continue
+            fi
+            if cmp -s "/tmp/rel-$f" "/tmp/cdn-$f"; then
+              echo "$f: release and jsDelivr agree ($(stat -c%s "/tmp/rel-$f") bytes)"
+            else
+              echo "::error::$f differs between the release and jsDelivr — purge did not take"
+              fail=1
+            fi
+          done
+          exit "$fail"
