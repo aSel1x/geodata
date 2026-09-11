@@ -6,7 +6,7 @@ V2Ray, built from two small config files in this repo.
 | file | contents | size |
 |---|---|---|
 | `geosite.dat` | `youtube` `telegram` `openai` `google-gemini` `instagram` `discord` `anthropic` | ~8 KB |
-| `geoip.dat` | `ru` (IPv4), `private` | ~130 KB |
+| `geoip.dat` | `telegram`, `ru` (IPv4), `private` | ~130 KB |
 
 Built every night at 00:00 UTC. Each build is verified — minimum size plus one assertion per
 section named in the configs — before anything is published.
@@ -80,6 +80,9 @@ IP data from [DB-IP](https://db-ip.com) IP to Country Lite, licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Domain lists from [v2fly/domain-list-community](https://github.com/v2fly/domain-list-community)
 and the geoip builder from [v2fly/geoip](https://github.com/v2fly/geoip), both MIT.
+Telegram prefixes come from Telegram's own published list at
+[core.telegram.org/resources/cidr.txt](https://core.telegram.org/resources/cidr.txt),
+fetched fresh on every build.
 
 The configuration and workflow in this repository are MIT licensed — see [LICENSE](LICENSE).
 The generated `.dat` files carry the licences of their sources.

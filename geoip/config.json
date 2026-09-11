@@ -1,11 +1,21 @@
 {
   "input": [
     {
+      "type": "text",
+      "action": "add",
+      "args": {
+        "name": "telegram",
+        "uri": "https://core.telegram.org/resources/cidr.txt"
+      }
+    },
+    {
       "type": "dbipCountryMMDB",
       "action": "add",
       "args": {
         "uri": "./db-ip/dbip-country-lite.mmdb",
-        "wantedList": ["ru"],
+        "wantedList": [
+          "ru"
+        ],
         "onlyIPType": "ipv4"
       }
     },
@@ -20,7 +30,11 @@
       "action": "output",
       "args": {
         "outputName": "geoip.dat",
-        "wantedList": ["ru", "private"]
+        "wantedList": [
+          "telegram",
+          "ru",
+          "private"
+        ]
       }
     }
   ]
