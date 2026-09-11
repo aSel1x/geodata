@@ -6,7 +6,7 @@ V2Ray, built from two small config files in this repo.
 | file | contents | size |
 |---|---|---|
 | `geosite.dat` | `youtube` `telegram` `openai` `google-gemini` `instagram` `discord` `anthropic` | ~8 KB |
-| `geoip.dat` | `telegram`, `ru` (IPv4), `private` | ~130 KB |
+| `geoip.dat` | `telegram`, `ru`, `private` — IPv4 and IPv6 | ~350 KB |
 
 Built every night at 00:00 UTC. Each build is verified — minimum size plus one assertion per
 section named in the configs — before anything is published.

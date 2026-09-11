@@ -15,8 +15,7 @@
         "uri": "./db-ip/dbip-country-lite.mmdb",
         "wantedList": [
           "ru"
-        ],
-        "onlyIPType": "ipv4"
+        ]
       }
     },
     {
