@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
+    inputs:
+      skip_release:
+        description: "Build and verify only, do not publish a release"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -15,8 +20,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+# Upstream v2fly/geoip and v2fly/domain-list-community raise their go.mod floor
+# whenever they feel like it, and setup-go pins GOTOOLCHAIN=local. Track stable and
+# let Go fetch a newer toolchain on demand so an upstream bump cannot break the build.
 env:
-  GO_VERSION: "1.25"
+  GOTOOLCHAIN: auto
 
 permissions:
   contents: write
@@ -33,20 +41,20 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: stable
 
       - name: Set variables
         run: |
-          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "RELEASE_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "YEAR=$(date +%Y)" >> $GITHUB_ENV
-          echo "MONTH=$(date +%m)" >> $GITHUB_ENV
+          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=$(date +%Y%m%d%H%M)" >> "$GITHUB_ENV"
 
       # --- geosite.dat ---
       - name: Clone v2fly/domain-list-community
         run: git clone --depth 1 https://github.com/v2fly/domain-list-community.git /tmp/geosite-src
 
       - name: Build geosite.dat
+        env:
+          GOTOOLCHAIN: auto
         run: |
           cp "${{ github.workspace }}/geosite/config.json" /tmp/geosite-src/config.json
           cd /tmp/geosite-src
@@ -58,23 +66,72 @@ jobs:
 
       - name: Download DB-IP MMDB
         run: |
-          URL="https://download.db-ip.com/free/dbip-country-lite-${{ env.YEAR }}-${{ env.MONTH }}.mmdb.gz"
-          curl -f -L -o /tmp/dbip-country-lite.mmdb.gz "$URL" || {
-            echo "DB-IP file for ${{ env.YEAR }}-${{ env.MONTH }} not found, trying previous month"
-            PREV=$(date -d "1 month ago" +%Y-%m)
-            URL="https://download.db-ip.com/free/dbip-country-lite-${PREV}.mmdb.gz"
-            curl -f -L -o /tmp/dbip-country-lite.mmdb.gz "$URL"
+          # Anchor month arithmetic to the 15th: `date -d "1 month ago"` on the 31st
+          # returns the *current* month, so the fallback would re-request the file
+          # that just 404'd.
+          fetch() {
+            echo "Trying DB-IP snapshot for $1"
+            curl -fsSL --retry 3 --retry-delay 5 \
+              -o /tmp/dbip-country-lite.mmdb.gz \
+              "https://download.db-ip.com/free/dbip-country-lite-$1.mmdb.gz"
           }
+          THIS=$(date +%Y-%m)
+          PREV=$(date -d "$(date +%Y-%m-15) -1 month" +%Y-%m)
+          fetch "$THIS" || fetch "$PREV"
           gzip -d /tmp/dbip-country-lite.mmdb.gz
           mkdir -p /tmp/geoip-src/db-ip
-          mv /tmp/dbip-country-lite*.mmdb /tmp/geoip-src/db-ip/dbip-country-lite.mmdb
+          mv /tmp/dbip-country-lite.mmdb /tmp/geoip-src/db-ip/dbip-country-lite.mmdb
 
       - name: Build geoip.dat
+        env:
+          GOTOOLCHAIN: auto
         run: |
           cp "${{ github.workspace }}/geoip/config.json" /tmp/geoip-src/config.json
           cd /tmp/geoip-src
           go run ./ -c config.json
           cp ./output/dat/geoip.dat "${{ github.workspace }}/geoip.dat"
+
+      # --- Verify before publishing ---
+      - name: Verify dat files
+        run: |
+          cd "${{ github.workspace }}"
+          fail=0
+
+          check_size() {
+            local f=$1 min=$2 actual
+            actual=$(stat -c%s "$f")
+            if [ "$actual" -lt "$min" ]; then
+              echo "::error::$f is $actual bytes, expected at least $min"
+              fail=1
+            else
+              echo "$f: $actual bytes"
+            fi
+          }
+
+          check_tags() {
+            local f=$1; shift
+            for tag in "$@"; do
+              # Section names sit behind a protobuf length byte that `strings` may
+              # render as leading punctuation (0x09 prints as a tab), so strip any
+              # leading non-alphanumerics before matching the whole line.
+              if strings -n 2 "$f" | sed 's/^[^A-Za-z0-9]*//' \
+                   | grep -qxF "$(echo "$tag" | tr '[:lower:]' '[:upper:]')"; then
+                echo "  $f contains $tag"
+              else
+                echo "::error::$f is missing the '$tag' section"
+                fail=1
+              fi
+            done
+          }
+
+          check_size geosite.dat 2048
+          check_size geoip.dat 20480
+
+          # shellcheck disable=SC2046
+          check_tags geosite.dat $(jq -r '.[0].lists[]' geosite/config.json)
+          check_tags geoip.dat   $(jq -r '.output[0].args.wantedList[]' geoip/config.json)
+
+          [ "$fail" -eq 0 ] || { echo "::error::refusing to publish a broken release"; exit 1; }
 
       # --- Release ---
       - name: Generate checksums
@@ -84,8 +141,9 @@ jobs:
           sha256sum geoip.dat > geoip.dat.sha256sum
 
       - name: Create Release
+        if: ${{ inputs.skip_release != true }}
         run: |
-          gh release create ${{ env.TAG_NAME }} \
+          gh release create "${{ env.TAG_NAME }}" \
             -t "${{ env.RELEASE_NAME }}" \
             --latest \
             geosite.dat geosite.dat.sha256sum \

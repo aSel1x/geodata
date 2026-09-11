@@ -1,6 +1,6 @@
 {
     "name": "geodat",
-    "image": "mcr.microsoft.com/devcontainers/go:1.24-bookworm",
+    "image": "mcr.microsoft.com/devcontainers/go:1.26-bookworm",
     "customizations": {
         "vscode": {
             "extensions": [
