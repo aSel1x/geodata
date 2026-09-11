@@ -94,7 +94,9 @@ Domain lists from [v2fly/domain-list-community](https://github.com/v2fly/domain-
 and the geoip builder from [v2fly/geoip](https://github.com/v2fly/geoip), both MIT.
 Telegram prefixes come from Telegram's own published list at
 [core.telegram.org/resources/cidr.txt](https://core.telegram.org/resources/cidr.txt),
-fetched fresh on every build.
+fetched fresh on every build, plus `95.161.64.0/20` — registered to Global Network
+Management Inc with Nikolai Durov as contact and Telegram Messenger Inc for abuse, the same
+contacts as the published ranges, but absent from the list itself.
 
 The configuration and workflow in this repository are MIT licensed — see [LICENSE](LICENSE).
 The generated `.dat` files carry the licences of their sources.

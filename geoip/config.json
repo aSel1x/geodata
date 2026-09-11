@@ -5,7 +5,10 @@
       "action": "add",
       "args": {
         "name": "telegram",
-        "uri": "https://core.telegram.org/resources/cidr.txt"
+        "uri": "https://core.telegram.org/resources/cidr.txt",
+        "ipOrCIDR": [
+          "95.161.64.0/20"
+        ]
       }
     },
     {
